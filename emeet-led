@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+"""
+emeet-led — control the eMeet M0 USB speakerphone LEDs (Linux).
+
+The eMeet M0 exposes a HID interface (VID:PID 0483:5730, "eMeet Tech eMeet M0")
+whose output reports drive the ring light and the call-button LED:
+
+  report 3 = ring: flash GREEN,   btn: solid GREEN   (shared report)
+  report 4 = ring: solid RED
+  report 5 = btn:  solid RED
+  report 6 = ring: solid BLUE
+
+Reports combine. Because report 3 touches both ring and button, always write
+button reports first and the ring report LAST (last write wins on the ring).
+
+Usage:
+  emeet-led <preset>            red blue green all-red blue-red
+                                 red-green blue-green green-red off demo
+  emeet-led <ring> <btn>        ring: red|blue|green|off  btn: green|red|off
+  emeet-led demo                cycle through ring colors
+  emeet-led -p /dev/hidraw1     explicit device path (auto-detected otherwise)
+
+Needs write access to /dev/hidrawN. Install the udev rule (udev/99-emeet-m0.rules)
+to allow unprivileged access, or run via sudo (script auto re-execs).
+"""
+import os
+import sys
+import time
+
+VID = "00000483"
+PID = "00005730"
+HIDRAW_SYSFS = "/sys/class/hidraw"
+
+RING_REPORTS = {3, 4, 6}
+BTN_REPORTS = {3, 5}
+
+PRESETS = {
+    "red":        ("red", "off"),
+    "blue":       ("blue", "off"),
+    "green":      ("green", "green"),
+    "all-red":    ("red", "red"),
+    "blue-red":   ("blue", "red"),
+    "red-green":  ("red", "green"),
+    "blue-green": ("blue", "green"),
+    "green-red":  ("green", "red"),   # experimental: btn green->red override
+    "off":        ("off", "off"),
+}
+
+
+def find_hidraw() -> str:
+    for name in sorted(os.listdir(HIDRAW_SYSFS)):
+        uevent = os.path.join(HIDRAW_SYSFS, name, "device", "uevent")
+        try:
+            with open(uevent) as f:
+                content = f.read()
+        except OSError:
+            continue
+        if f"HID_ID=0003:{VID}:{PID}" in content:
+            return f"/dev/{name}"
+    raise SystemExit(f"eMeet M0 not found (looked for {VID}:{PID} under {HIDRAW_SYSFS})")
+
+
+def write(hidraw: str, rid: int, val: int):
+    with open(hidraw, "wb") as f:
+        f.write(bytes([rid, 1 if val else 0]))
+
+
+def apply(hidraw: str, ring: str, btn: str):
+    # clear everything first, then btn reports, then ring last
+    seq = [(r, 0) for r in sorted(RING_REPORTS | BTN_REPORTS)]
+    if btn == "green":
+        seq.append((3, 1))
+    elif btn == "red":
+        seq.append((5, 1))
+    if ring == "green":
+        seq.append((3, 1))
+    elif ring == "red":
+        seq.append((4, 1))
+    elif ring == "blue":
+        seq.append((6, 1))
+    for rid, val in seq:
+        write(hidraw, rid, val)
+
+
+def demo(hidraw: str):
+    for name in ("red", "green", "blue", "all-red", "blue-green"):
+        print(f"demo: {name}", flush=True)
+        apply(hidraw, *PRESETS[name])
+        time.sleep(2.5)
+    apply(hidraw, "off", "off")
+    print("demo done")
+
+
+def main():
+    args = sys.argv[1:]
+    hidraw = None
+
+    if "-p" in args:
+        i = args.index("-p")
+        hidraw = args[i + 1]
+        args = args[:i] + args[i + 2:]
+
+    if not args:
+        print(__doc__)
+        sys.exit(1)
+
+    if os.geteuid() != 0 and hidraw is None:
+        # without a udev rule, re-exec via sudo (passwordless sudo assumed)
+        os.execvp("sudo", ["sudo", sys.executable, os.path.abspath(__file__)] + sys.argv[1:])
+
+    hidraw = hidraw or find_hidraw()
+    print(f"device: {hidraw}")
+
+    if args[0] == "demo":
+        demo(hidraw)
+        return
+
+    if len(args) == 1:
+        if args[0] not in PRESETS:
+            print(f"unknown preset: {args[0]}", file=sys.stderr)
+            print("presets:", ", ".join(PRESETS), file=sys.stderr)
+            sys.exit(1)
+        ring, btn = PRESETS[args[0]]
+    elif len(args) == 2:
+        ring, btn = args
+        if ring not in ("red", "blue", "green", "off") or btn not in ("green", "red", "off"):
+            print("ring: red|blue|green|off   btn: green|red|off", file=sys.stderr)
+            sys.exit(1)
+    else:
+        print(__doc__)
+        sys.exit(1)
+
+    apply(hidraw, ring, btn)
+    print(f"ring={ring} btn={btn}")
+
+
+if __name__ == "__main__":
+    main()
