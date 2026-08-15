@@ -63,6 +63,7 @@ emeet-led demo              # cycle through the effects
 emeet-led <ring> <btn>      # arbitrary combo: ring=red|blue|green|off btn=green|red|off
 emeet-led -p /dev/hidraw2   # explicit device (auto-detected by default)
 emeet-led -d 5 blue         # show for 5 s, then off (blocking, decimals ok: -d 0.5)
+emeet-led -h                # help (--help works too)
 ```
 
 The device is auto-discovered by VID:PID (`0483:5730`) under

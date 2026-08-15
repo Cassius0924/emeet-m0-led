@@ -24,6 +24,11 @@ Usage:
   emeet-led -d 0.5 red          decimals allowed
   emeet-led -p /dev/hidraw1     explicit device path (auto-detected otherwise)
 
+Options:
+  -p PATH       explicit hidraw device path (auto-detected otherwise)
+  -d SECONDS    turn off after SECONDS (blocking, decimals allowed)
+  -h, --help    show this help
+
 Needs write access to /dev/hidrawN. Install the udev rule (udev/99-emeet-m0.rules)
 to allow unprivileged access, or run via sudo (script auto re-execs).
 """
@@ -106,6 +111,10 @@ def main():
     args = sys.argv[1:]
     hidraw = None
     duration = None
+
+    if "-h" in args or "--help" in args:
+        print(__doc__)
+        sys.exit(0)
 
     if "-p" in args:
         i = args.index("-p")
