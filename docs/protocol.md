@@ -72,14 +72,11 @@ channels. The firmware maps each report to a fixed color/behaviour.
 
 ## Combination rules
 
-- Reports are independent: e.g. `report 6` + `report 5` gives blue ring + red
-  button (verified).
-- Report 3 touches **both** ring and button. When combining report 3 with a
-  ring report (4 or 6), write the button/ring-3 report **first**, then the ring
-  report **last** — the last write wins for the ring register (verified with
-  red ring + green button, and blue ring + green button).
-- `green` ring + red button (reports 3 then 5) is plausible by the same rule
-  but less tested.
+- Reports 3/5 (button) and 4/6 (ring) are independent: e.g. `report 6` +
+  `report 5` gives blue ring + red button (verified).
+- Report 3 controls both ring and button together.
+- Unsupported on this hardware: green button with red/blue ring, and
+  flashing green ring with red button.
 
 ## Writing reports
 

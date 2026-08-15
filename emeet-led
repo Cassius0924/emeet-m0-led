@@ -10,14 +10,18 @@ whose output reports drive the ring light and the call-button LED:
   report 5 = btn:  solid RED
   report 6 = ring: solid BLUE
 
-Reports combine. Because report 3 touches both ring and button, always write
-button reports first and the ring report LAST (last write wins on the ring).
+Hardware limitation (verified on device):
+  Report 3 is DOMINANT over the ring. When report 3 is active the ring shows
+  flashing green no matter what reports 4/6 say. So these combos are IMPOSSIBLE:
+    - green button with red/blue ring  (ring will flash green)
+    - flashing green ring with red button
+  All other states combine cleanly.
 
 Usage:
-  emeet-led <preset>            red blue green all-red blue-red
-                                 red-green blue-green green-red off demo
-  emeet-led <ring> <btn>        ring: red|blue|green|off  btn: green|red|off
-  emeet-led demo                cycle through ring colors
+  emeet-led <preset>            red blue green btn-red all-red blue-red off demo
+  emeet-led <ring> <btn>        ring: red|blue|green|off  btn: red|off|green
+  emeet-led -d 5 blue           show for 5 seconds, then turn off (blocking)
+  emeet-led -d 0.5 red          decimals allowed
   emeet-led -p /dev/hidraw1     explicit device path (auto-detected otherwise)
 
 Needs write access to /dev/hidrawN. Install the udev rule (udev/99-emeet-m0.rules)
@@ -34,17 +38,24 @@ HIDRAW_SYSFS = "/sys/class/hidraw"
 RING_REPORTS = {3, 4, 6}
 BTN_REPORTS = {3, 5}
 
+# only presets that physically work on the device (report 3 dominates the ring)
 PRESETS = {
-    "red":        ("red", "off"),
-    "blue":       ("blue", "off"),
-    "green":      ("green", "green"),
-    "all-red":    ("red", "red"),
-    "blue-red":   ("blue", "red"),
-    "red-green":  ("red", "green"),
-    "blue-green": ("blue", "green"),
-    "green-red":  ("green", "red"),   # experimental: btn green->red override
-    "off":        ("off", "off"),
+    "red":       ("red", "off"),
+    "blue":      ("blue", "off"),
+    "green":     ("green", "green"),
+    "btn-red":   ("off", "red"),
+    "all-red":   ("red", "red"),
+    "blue-red":  ("blue", "red"),
+    "off":       ("off", "off"),
 }
+
+# combos not supported by the hardware
+INVALID_COMBOS = (
+    ("red", "green"),
+    ("blue", "green"),
+    ("green", "red"),
+    ("off", "green"),
+)
 
 
 def find_hidraw() -> str:
@@ -82,11 +93,11 @@ def apply(hidraw: str, ring: str, btn: str):
         write(hidraw, rid, val)
 
 
-def demo(hidraw: str):
-    for name in ("red", "green", "blue", "all-red", "blue-green"):
+def demo(hidraw: str, per_phase: float = 2.5):
+    for name in ("red", "green", "blue", "all-red", "blue-red"):
         print(f"demo: {name}", flush=True)
         apply(hidraw, *PRESETS[name])
-        time.sleep(2.5)
+        time.sleep(per_phase)
     apply(hidraw, "off", "off")
     print("demo done")
 
@@ -94,10 +105,23 @@ def demo(hidraw: str):
 def main():
     args = sys.argv[1:]
     hidraw = None
+    duration = None
 
     if "-p" in args:
         i = args.index("-p")
         hidraw = args[i + 1]
+        args = args[:i] + args[i + 2:]
+
+    if "-d" in args:
+        i = args.index("-d")
+        try:
+            duration = float(args[i + 1])
+        except (ValueError, IndexError):
+            print("invalid duration for -d", file=sys.stderr)
+            sys.exit(1)
+        if duration <= 0:
+            print("duration must be > 0", file=sys.stderr)
+            sys.exit(1)
         args = args[:i] + args[i + 2:]
 
     if not args:
@@ -112,7 +136,7 @@ def main():
     print(f"device: {hidraw}")
 
     if args[0] == "demo":
-        demo(hidraw)
+        demo(hidraw, duration or 2.5)
         return
 
     if len(args) == 1:
@@ -130,8 +154,19 @@ def main():
         print(__doc__)
         sys.exit(1)
 
+    for combo in INVALID_COMBOS:
+        if (ring, btn) == combo:
+            print(f"unsupported combo: ring={ring} btn={btn}", file=sys.stderr)
+            sys.exit(1)
+
     apply(hidraw, ring, btn)
-    print(f"ring={ring} btn={btn}")
+    if duration is not None:
+        print(f"ring={ring} btn={btn} for {duration}s", flush=True)
+        time.sleep(duration)
+        apply(hidraw, "off", "off")
+        print("off")
+    else:
+        print(f"ring={ring} btn={btn}")
 
 
 if __name__ == "__main__":

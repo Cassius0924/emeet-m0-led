@@ -20,23 +20,21 @@ signals, notification light) or just for fun.
 
 ## Supported effects
 
-| Effect             | Ring light            | Call button    |
-|--------------------|-----------------------|----------------|
-| `red`              | 🔴 solid red          | off            |
-| `blue`             | 🔵 solid blue         | off            |
-| `green`            | 🟢 flashing green     | 🟢 solid green |
-| `all-red`          | 🔴 solid red          | 🔴 solid red   |
-| `blue-red`         | 🔵 solid blue         | 🔴 solid red   |
-| `red-green`        | 🔴 solid red          | 🟢 solid green |
-| `blue-green`       | 🔵 solid blue         | 🟢 solid green |
-| `green-red`*       | 🟢 flashing green     | 🔴 solid red   |
-| `off`              | off                   | off            |
-
-\* `green-red` relies on the last-write-wins behaviour of the shared report 3
-and is less tested.
+| Effect       | Ring light            | Call button    |
+|--------------|-----------------------|----------------|
+| `red`        | 🔴 solid red          | off            |
+| `blue`       | 🔵 solid blue         | off            |
+| `green`      | 🟢 flashing green     | 🟢 solid green |
+| `btn-red`    | off                   | 🔴 solid red   |
+| `all-red`    | 🔴 solid red          | 🔴 solid red   |
+| `blue-red`   | 🔵 solid blue         | 🔴 solid red   |
+| `off`        | off                   | off            |
 
 No RGB: the HID descriptor only exposes single-bit LEDs (usage page 0x08, LED
 usages 0x09/0x17/0x18/0x20), so colors are limited to what the firmware knows.
+
+Not supported (hardware): green button with red/blue ring, and flashing green
+ring with red button.
 
 ## Install
 
@@ -58,15 +56,20 @@ sudo udevadm control --reload && sudo udevadm trigger
 
 ```sh
 emeet-led blue              # blue ring
-emeet-led red-green         # red ring + green call button
+emeet-led all-red           # red ring + red call button
+emeet-led btn-red           # call button red, ring off
 emeet-led off               # everything off
 emeet-led demo              # cycle through the effects
 emeet-led <ring> <btn>      # arbitrary combo: ring=red|blue|green|off btn=green|red|off
 emeet-led -p /dev/hidraw2   # explicit device (auto-detected by default)
+emeet-led -d 5 blue         # show for 5 s, then off (blocking, decimals ok: -d 0.5)
 ```
 
 The device is auto-discovered by VID:PID (`0483:5730`) under
 `/sys/class/hidraw/`, so the script works regardless of the `hidrawN` number.
+
+Unsupported combos (green button with red/blue ring, green ring with red
+button) are rejected by the tool with an error.
 
 ## How it works
 
